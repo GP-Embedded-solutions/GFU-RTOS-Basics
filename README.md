@@ -12,7 +12,7 @@ Target hardware: **Raspberry Pi 4 Model B (4 GB, BCM2711, arm64)**.
 | 1 | Read `docs/01_Raspberry_Pi_OS_Download_and_Flash.pdf` and follow it end to end | **Before day 1** |
 | 2 | Run `scripts/verify.sh` on the Pi — all mandatory checks must pass | Before day 1 |
 | 3 | Report the output in the course channel if anything fails | Before day 1 |
-| 4 | `docs/02_PREEMPT_RT_Setup_on_Raspberry_Pi_4.pdf` | Day 1, guided |
+| 4 | `docs/02_PREEMPT_RT_Setup_on_Raspberry_Pi_4.pdf` | Day 1, guided or Bedfore day 1 |
 
 Do not start document 2 until `verify.sh` passes. Debugging a custom kernel on
 top of a broken base wastes an evening.
