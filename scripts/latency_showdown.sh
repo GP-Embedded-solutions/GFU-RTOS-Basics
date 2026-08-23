@@ -32,6 +32,8 @@
 # =============================================================================
 set -uo pipefail
 
+SKRIPT_VERSION="2026-08-20b"
+
 DAUER=60
 ERGDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ergebnisse"
 NUR_VERGLEICH=0
@@ -49,6 +51,15 @@ GRN='\033[1;32m'; RED='\033[1;31m'; BLU='\033[1;34m'; YLW='\033[1;33m'; BLD='\03
 
 mkdir -p "$ERGDIR"
 
+# ---------------------------------------------------------- Max-Wert auslesen
+max_aus_datei() {
+    local datei="$1"
+    [ -f "$datei" ] || { printf -- '-'; return; }
+    local werte
+    werte="$(grep -a 'Max Latencies' "$datei" | grep -oE '[0-9]+' | sort -n | tail -1)"
+    if [ -n "$werte" ]; then printf '%s' "$((10#$werte))"; else printf -- '-'; fi
+}
+
 # --------------------------------------------------------------- Kernel erkennen
 if uname -a | grep -q PREEMPT_RT; then
     KERNELTYP="rt";  KERNELLABEL="PREEMPT_RT"
@@ -62,16 +73,57 @@ if [ $NUR_VERGLEICH -eq 1 ]; then
     printf "================================================================\n"
     printf "   LATENCY SHOWDOWN -- Gegenueberstellung\n"
     printf "================================================================${NC}\n\n"
-    printf "%-34s %14s %14s\n" "Szenario" "Standard" "PREEMPT_RT"
-    printf -- "----------------------------------------------------------------\n"
+    printf "Skript-Version : %s\n" "$SKRIPT_VERSION"
+    printf "Ergebnis-Ordner: %s\n\n" "$ERGDIR"
+
+    if [ ! -d "$ERGDIR" ]; then
+        printf "${RED}Ordner existiert nicht.${NC}\n"
+        printf "Das Skript sucht immer NEBEN SICH SELBST. Liegt dieses Skript\n"
+        printf "im selben Verzeichnis wie beim Messen? Gefundene Ergebnisordner:\n"
+        find "$HOME" -maxdepth 3 -type d -name ergebnisse 2>/dev/null | sed 's/^/    /'
+        exit 1
+    fi
+
+    ANZ="$(ls -1 "$ERGDIR"/*.txt 2>/dev/null | wc -l)"
+    printf "Gefundene Messdateien: %s\n" "$ANZ"
+    if [ "$ANZ" -eq 0 ]; then
+        printf "\n${RED}Dieser Ordner ist leer.${NC}\n"
+        printf "${YLW}Haeufigste Ursache: Das Skript liegt in einem ANDEREN Verzeichnis\n"
+        printf "als beim Messen. Es sucht immer neben sich selbst -- und legt einen\n"
+        printf "leeren Ordner an, wenn keiner da ist.${NC}\n\n"
+        printf "Andere Ergebnisordner auf diesem System:\n"
+        find "$HOME" -maxdepth 4 -type d -name ergebnisse 2>/dev/null \
+            | while read -r d; do printf "    %-40s (%s Dateien)\n" "$d" "$(ls -1 "$d"/*.txt 2>/dev/null | wc -l)"; done
+        printf "\nLoesung: Skript dorthin kopieren, oder Ergebnisse hierher verschieben.\n\n"
+    fi
+    if [ "$ANZ" -gt 0 ]; then
+        for f in "$ERGDIR"/*.txt; do
+            n="$(grep -ac 'Max Latencies' "$f" 2>/dev/null)"; n="${n:-0}"
+            if [ "$n" -gt 0 ]; then
+                printf "  ${GRN}OK${NC}   %-24s (Max-Zeilen: %s)\n" "$(basename "$f")" "$n"
+            else
+                printf "  ${RED}LEER${NC} %-24s keine Zeile 'Max Latencies' enthalten\n" "$(basename "$f")"
+            fi
+        done
+    fi
+    echo
+    printf "%-26s %14s %14s %8s\n" "Szenario" "Standard" "PREEMPT_RT" "Faktor"
+    printf -- "--------------------------------------------------------------------\n"
     for sz in 1_ohne_last 2_cpu_last 3_volle_last 4_fifo; do
-        max_std="-"; max_rt="-"
-        [ -f "$ERGDIR/std_${sz}.txt" ] && max_std="$(grep -oE 'Max:[[:space:]]*[0-9]+' "$ERGDIR/std_${sz}.txt" | grep -oE '[0-9]+' | sort -n | tail -1)"
-        [ -f "$ERGDIR/rt_${sz}.txt"  ] && max_rt="$(grep -oE 'Max:[[:space:]]*[0-9]+' "$ERGDIR/rt_${sz}.txt"  | grep -oE '[0-9]+' | sort -n | tail -1)"
+        max_std="$(max_aus_datei "$ERGDIR/std_${sz}.txt")"
+        max_rt="$(max_aus_datei  "$ERGDIR/rt_${sz}.txt")"
         label="$(printf '%s' "$sz" | sed 's/^[0-9]_//; s/_/ /g')"
-        printf "%-34s %11s us %11s us\n" "$label" "${max_std:--}" "${max_rt:--}"
+        faktor="-"
+        if [ "$max_std" != "-" ] && [ "$max_rt" != "-" ] && [ "$max_rt" -gt 0 ]; then
+            faktor="$(awk -v a="$max_std" -v b="$max_rt" 'BEGIN{printf "%.1fx", a/b}')"
+        fi
+        printf "%-26s %11s us %11s us %8s\n" "$label" "$max_std" "$max_rt" "$faktor"
     done
-    printf -- "----------------------------------------------------------------\n"
+    printf -- "--------------------------------------------------------------------\n"
+    if [ "$(max_aus_datei "$ERGDIR/std_3_volle_last.txt")" = "-" ]; then
+        printf "\n${YLW}HINWEIS: Fuer den Standardkernel liegen noch keine Messungen vor.${NC}\n"
+        printf "${YLW}         sudo ./switch-kernel.sh std   &&   sudo ./latency_showdown.sh${NC}\n"
+    fi
     printf "\n${YLW}Lies die Zeile 'volle last'. Dort entscheidet sich alles.${NC}\n"
     printf "${YLW}Die Zeile 'ohne last' ist die Falle: dort sehen beide gut aus.${NC}\n\n"
     exit 0
