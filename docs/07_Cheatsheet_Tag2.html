@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Cheat-Sheet Echtzeit-Linux – Tag 2</title>
+<style>
+  @page { size: A4; margin: 9mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 7.4pt;
+         line-height: 1.32; color: #16191d; margin: 0; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  header { border-bottom: 2.5pt solid #b8571e; padding-bottom: 2mm; margin-bottom: 3mm;
+           display: flex; justify-content: space-between; align-items: baseline; }
+  header h1 { font-size: 13pt; margin: 0; letter-spacing: -0.2pt; }
+  header .sub { font-size: 7pt; color: #666; }
+  .cols { column-count: 2; column-gap: 5mm; }
+  section { break-inside: avoid; margin-bottom: 3.2mm; }
+  h2 { font-size: 8pt; margin: 0 0 1.2mm 0; padding: 0.9mm 1.6mm; background: #16191d;
+       color: #fff; text-transform: uppercase; letter-spacing: 0.5pt; border-radius: 1pt; }
+  h3 { font-size: 7.4pt; margin: 2mm 0 0.8mm 0; color: #b8571e; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 0.7mm 1.2mm; vertical-align: top; border-bottom: 0.3pt solid #e2e2e2; }
+  td.k { width: 44%; }
+  code, .cmd { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 6.9pt;
+               background: #f2f0ec; padding: 0.3mm 0.8mm; border-radius: 1pt; }
+  .note { background: #fdf6ee; border-left: 2pt solid #b8571e; padding: 1.3mm 2mm;
+          margin: 1.5mm 0; font-size: 7pt; }
+  .warn { background: #fdeeee; border-left: 2pt solid #b02020; padding: 1.3mm 2mm;
+          margin: 1.5mm 0; font-size: 7pt; }
+  .big { font-size: 8pt; font-weight: bold; }
+  footer { margin-top: 2mm; border-top: 0.5pt solid #ccc; padding-top: 1.2mm;
+           font-size: 6.2pt; color: #888; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+
+<div class="page">
+<header>
+  <h1>Echtzeit-Linux &mdash; Cheat-Sheet Tag 2</h1>
+  <span class="sub">Determinismus herstellen &middot; Trainer: G. Pandji</span>
+</header>
+
+<div class="note">
+<span class="big">Die drei Ebenen &mdash; und wann sie wirken</span><br>
+<b>Build</b> (<code>.config</code>) &rarr; nach Kernel-Neubau &middot; <b>Boot</b> (<code>cmdline.txt</code>) &rarr; nach Neustart &middot; <b>Laufzeit</b> (<code>chrt</code>, <code>taskset</code>, sysfs) &rarr; sofort.<br>
+<i>Build entscheidet, was m&ouml;glich ist. Boot, was reserviert ist. Laufzeit, wer es bekommt.</i>
+</div>
+
+<div class="cols">
+
+<section>
+<h2>cyclictest &mdash; die wichtigsten Flags</h2>
+<table>
+<tr><td class="k"><code>-m</code></td><td>Speicher sperren (mlockall)</td></tr>
+<tr><td class="k"><code>-S</code></td><td>SMP-Modus: ein Thread je Kern</td></tr>
+<tr><td class="k"><code>-p 99</code></td><td>Priorit&auml;t der Messthreads</td></tr>
+<tr><td class="k"><code>-i 1000</code></td><td>Basisintervall in &micro;s</td></tr>
+<tr><td class="k"><code>-D 60s</code></td><td>Messdauer (mind. 60 s!)</td></tr>
+<tr><td class="k"><code>-h 200</code></td><td>Histogramm bis 200 &micro;s</td></tr>
+<tr><td class="k"><code>-a 3</code></td><td>nur auf Kern 3 messen</td></tr>
+<tr><td class="k"><code>-q</code></td><td>still, nur Endergebnis</td></tr>
+</table>
+<h3>Standardlauf</h3>
+<div class="cmd">sudo cyclictest -m -S -p 99 -i 1000 -D 60s -h 200</div>
+<div class="warn"><b>Nur Max z&auml;hlt.</b> Der Mittelwert beschreibt ein System, das es nicht gibt. Und: <b>nie ohne Last messen</b>.</div>
+</section>
+
+<section>
+<h2>Last erzeugen (sonst ist die Messung wertlos)</h2>
+<div class="cmd">sudo stress-ng --cpu 4 --io 2 --vm 1 \<br>&nbsp;&nbsp;--vm-bytes 128M --timeout 70s</div>
+<table>
+<tr><td class="k"><code>--cpu N</code></td><td>N Rechenlast-Threads</td></tr>
+<tr><td class="k"><code>--io N</code></td><td>Dateisystem-Last</td></tr>
+<tr><td class="k"><code>--vm 1 --vm-bytes</code></td><td>Speicherdruck</td></tr>
+</table>
+</section>
+
+<section>
+<h2>rtla &mdash; wer stiehlt die Zeit?</h2>
+<table>
+<tr><td class="k"><code>rtla timerlat top -d 30s</code></td><td>Latenz nach Ursache zerlegt</td></tr>
+<tr><td class="k"><code>rtla osnoise top -d 30s</code></td><td>St&ouml;rquellen im Betriebssystem</td></tr>
+<tr><td class="k"><code>rtla osnoise hist -d 30s</code></td><td>als Histogramm</td></tr>
+</table>
+<div class="note">cyclictest sagt <b>dass</b>. rtla sagt <b>wer</b>.</div>
+</section>
+
+<section>
+<h2>Boot-Parameter (cmdline.txt / GRUB)</h2>
+<table>
+<tr><td class="k"><code>isolcpus=3</code></td><td>Scheduler meidet Kern 3</td></tr>
+<tr><td class="k"><code>nohz_full=3</code></td><td>kein Timer-Tick auf Kern 3</td></tr>
+<tr><td class="k"><code>rcu_nocbs=3</code></td><td>RCU-Callbacks woanders</td></tr>
+<tr><td class="k"><code>irqaffinity=0,1</code></td><td>IRQs nur auf Kern 0 und 1</td></tr>
+<tr><td class="k"><code>threadirqs</code></td><td>IRQ-Handler als Threads</td></tr>
+<tr><td class="k"><code>processor.max_cstate=1</code></td><td>tiefe Schlafzust&auml;nde aus (x86)</td></tr>
+</table>
+<div class="warn"><b>Raspberry Pi:</b> <code>cmdline.txt</code> muss <b>eine einzige Zeile</b> sein. Ein Zeilenumbruch, und alles danach wird stillschweigend ignoriert. Wirksam erst nach <b>Neustart</b>.</div>
+</section>
+
+<section>
+<h2>Isolierung nachweisen &mdash; vier Fragen</h2>
+<table>
+<tr><td class="k">1. Steht es in der Bootzeile?</td><td><code>cat /proc/cmdline</code></td></tr>
+<tr><td class="k">2. Sieht der Kernel es so?</td><td><code>cat /sys/devices/system/cpu/isolated</code></td></tr>
+<tr><td class="k">3. L&auml;uft dort noch etwas?</td><td><code>ps -eLo pid,psr,comm | awk '$2==3'</code></td></tr>
+<tr><td class="k">4. Interrupts dort?</td><td><code>cat /proc/interrupts</code> (2&times; messen, <b>Differenz</b>)</td></tr>
+</table>
+<div class="warn">Drei von vier ist <b>nicht</b> isoliert.</div>
+</section>
+
+</div>
+<footer><span>Echtzeit-Linux &middot; Tag 2 &middot; Seite 1/2</span><span>GFU Cyrus AG</span></footer>
+</div>
+
+<div class="page">
+<header>
+  <h1>Scheduling, Priorit&auml;ten &amp; Mutexe</h1>
+  <span class="sub">Tag 2 &middot; Seite 2</span>
+</header>
+
+<div class="cols">
+
+<section>
+<h2>Scheduling-Policies</h2>
+<table>
+<tr><td class="k"><b>SCHED_OTHER</b> (CFS)</td><td>fair, kein Vorrang &mdash; Standard</td></tr>
+<tr><td class="k"><b>SCHED_FIFO</b></td><td>l&auml;uft bis blockiert/verdr&auml;ngt, keine Zeitscheibe</td></tr>
+<tr><td class="k"><b>SCHED_RR</b></td><td>wie FIFO + Zeitscheibe unter Gleichrangigen</td></tr>
+<tr><td class="k"><b>SCHED_DEADLINE</b></td><td>Frist + Rechenbedarf statt Wichtigkeit</td></tr>
+<tr><td class="k"><b>SCHED_IDLE</b></td><td>nur wenn sonst nichts will</td></tr>
+</table>
+</section>
+
+<section>
+<h2>Priorit&auml;tsschema</h2>
+<table>
+<tr><td class="k"><b>99</b></td><td>Kernel-Threads, Watchdog &mdash; <b>Finger weg</b></td></tr>
+<tr><td class="k"><b>80&ndash;90</b></td><td>harte Deadline, kurze Laufzeit</td></tr>
+<tr><td class="k"><b>50&ndash;79</b></td><td>Echtzeit mit Toleranz</td></tr>
+<tr><td class="k"><b>10&ndash;49</b></td><td>echtzeitnah, unkritisch</td></tr>
+<tr><td class="k">SCHED_OTHER</td><td>alles &Uuml;brige</td></tr>
+</table>
+<div class="note">Priorit&auml;t ist eine Aussage &uuml;ber Deadlines, kein Wunsch.</div>
+</section>
+
+<section>
+<h2>chrt &amp; taskset</h2>
+<table>
+<tr><td class="k"><code>chrt -m</code></td><td>g&uuml;ltige Bereiche anzeigen</td></tr>
+<tr><td class="k"><code>chrt -f 80 ./prog</code></td><td>FIFO 80 starten</td></tr>
+<tr><td class="k"><code>chrt -f -p 80 PID</code></td><td>im Betrieb &auml;ndern</td></tr>
+<tr><td class="k"><code>chrt -p PID</code></td><td>abfragen</td></tr>
+<tr><td class="k"><code>taskset -c 3 ./prog</code></td><td>auf Kern 3 starten</td></tr>
+<tr><td class="k"><code>taskset -cp 3 PID</code></td><td>im Betrieb umziehen</td></tr>
+<tr><td class="k"><code>taskset -c 3 chrt -f 80 ./p</code></td><td>beides kombiniert</td></tr>
+</table>
+</section>
+
+<section>
+<h2>Nachsehen statt annehmen</h2>
+<div class="cmd">ps -eLo pid,psr,class,rtprio,ni,pcpu,comm --sort=-rtprio | head</div>
+<table>
+<tr><td class="k"><code>psr</code></td><td>auf welchem Kern l&auml;uft es <i>gerade</i></td></tr>
+<tr><td class="k"><code>class</code></td><td>FF=FIFO, RR, TS=OTHER</td></tr>
+<tr><td class="k"><code>rtprio</code></td><td>Echtzeit-Priorit&auml;t</td></tr>
+</table>
+</section>
+
+<section>
+<h2>Governor &amp; Energie</h2>
+<div class="cmd">cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor<br>
+echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor</div>
+<div class="warn">Determinismus und Energieeffizienz sind ein Zielkonflikt. Vor jeder Messung: Governor auf <code>performance</code>.</div>
+</section>
+
+<section>
+<h2>IRQ-Affinit&auml;t</h2>
+<div class="cmd">cat /proc/interrupts<br>
+echo 3 | sudo tee /proc/irq/&lt;N&gt;/smp_affinity&nbsp;&nbsp;# Bitmaske: 3 = Kern 0+1</div>
+<div class="note">Maske ist hexadezimal und bitweise: <code>1</code>=Kern&nbsp;0, <code>2</code>=Kern&nbsp;1, <code>3</code>=Kern&nbsp;0+1, <code>8</code>=Kern&nbsp;3. Manche IRQs lassen sich nicht verschieben.</div>
+</section>
+
+<section>
+<h2>Mutexe &amp; Priorit&auml;tsinversion</h2>
+<div class="cmd">pthread_mutexattr_init(&amp;a);<br>
+pthread_mutexattr_setprotocol(&amp;a,<br>&nbsp;&nbsp;&nbsp;&nbsp;PTHREAD_PRIO_INHERIT);<br>
+pthread_mutex_init(&amp;m, &amp;a);</div>
+<table>
+<tr><td class="k"><b>beschr&auml;nkte Inversion</b></td><td>Wartezeit = kritischer Abschnitt. Planbar.</td></tr>
+<tr><td class="k"><b>unbeschr&auml;nkte Inversion</b></td><td>Dritter Thread verdr&auml;ngt den Halter. Nicht absch&auml;tzbar.</td></tr>
+<tr><td class="k"><b>PRIO_INHERIT</b></td><td>Halter erbt Priorit&auml;t des Wartenden</td></tr>
+<tr><td class="k"><b>PRIO_PROTECT</b></td><td>Ceiling: feste Obergrenze am Mutex</td></tr>
+</table>
+<div class="note">Beste L&ouml;sung bleibt: <b>kein Mutex zwischen Priorit&auml;tsklassen teilen.</b> Vererbung ist eine Reparatur.</div>
+</section>
+
+<section>
+<h2>Speicher</h2>
+<div class="cmd">#include &lt;sys/mman.h&gt;<br>
+mlockall(MCL_CURRENT | MCL_FUTURE);</div>
+<div class="note">Regel wichtiger als der Syscall: <b>in der Echtzeitschleife wird nicht mehr alloziert.</b> Speicher in der Startphase holen <i>und anfassen</i>.</div>
+</section>
+
+<section>
+<h2>Zyklus ohne Drift</h2>
+<div class="cmd">clock_gettime(CLOCK_MONOTONIC, &amp;t);<br>
+while (1) {<br>
+&nbsp;&nbsp;t.tv_nsec += 1000000; normalize(&amp;t);<br>
+&nbsp;&nbsp;clock_nanosleep(CLOCK_MONOTONIC,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;TIMER_ABSTIME, &amp;t, NULL);<br>
+&nbsp;&nbsp;arbeit();<br>
+}</div>
+<div class="warn"><code>sleep()</code> und relatives <code>nanosleep()</code> driften: die Arbeitszeit addiert sich auf. <b>Immer absolut.</b></div>
+</section>
+
+</div>
+<footer><span>Echtzeit-Linux &middot; Tag 2 &middot; Seite 2/2</span><span>Trainer: Ga&euml;tan Pandji</span></footer>
+</div>
+
+</body>
+</html>
