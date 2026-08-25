@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Cheat-Sheet Echtzeit-Linux – Tag 1</title>
+<style>
+  @page { size: A4; margin: 9mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 8.7pt; line-height: 1.38; color: #16191d; margin: 0;
+  }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+
+  header {
+    border-bottom: 2.5pt solid #b8571e; padding-bottom: 2mm; margin-bottom: 3mm;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  header h1 { font-size: 16pt; margin: 0; letter-spacing: -0.2pt; }
+  header .sub { font-size: 8.5pt; color: #666; }
+
+  .cols { display: flex; gap: 5mm; align-items: flex-start; }
+  .col { flex: 1 1 0; min-width: 0; }
+
+  section { break-inside: avoid; margin-bottom: 4.5mm; }
+  h2 {
+    font-size: 10pt; margin: 0 0 1.8mm 0; padding: 0.9mm 1.6mm;
+    background: #16191d; color: #fff; text-transform: uppercase;
+    letter-spacing: 0.5pt; border-radius: 1pt;
+  }
+  h3 { font-size: 9.6pt; margin: 2mm 0 0.8mm 0; color: #b8571e; }
+
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 0.9mm 1.3mm; vertical-align: top; border-bottom: 0.3pt solid #e2e4e6; }
+  td.c { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 8.2pt;
+         white-space: nowrap; color: #0d3b66; width: 47%; }
+  td.d { color: #333; }
+
+  h2 code { background: rgba(255,255,255,0.20); color: #fff; }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace;
+         background: #eef0f2; padding: 0.2mm 0.7mm; border-radius: 1pt; font-size: 9pt; }
+
+  .box { border-left: 2.5pt solid #b8571e; background: #fdf5ef;
+         padding: 1.5mm 2mm; margin: 1.5mm 0; break-inside: avoid; }
+  .box b { color: #b8571e; }
+  .warn { border-left-color: #c0392b; background: #fdf0ef; }
+  .warn b { color: #c0392b; }
+
+  .big { font-size: 11pt; font-weight: bold; text-align: center;
+         padding: 2mm; background: #16191d; color: #fff; border-radius: 1.5pt;
+         margin: 2mm 0; }
+
+  footer { position: fixed; bottom: 3mm; left: 9mm; right: 9mm;
+           font-size: 6pt; color: #999; border-top: 0.3pt solid #ddd;
+           padding-top: 1mm; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+
+<!-- ================================ SEITE 1 ================================ -->
+<div class="page">
+<header>
+  <h1>Echtzeit-Linux &mdash; Cheat-Sheet Tag 1</h1>
+  <span class="sub">Trainer: Ga&euml;tan Pandji &middot; Raspberry Pi 4 / PREEMPT_RT</span>
+</header>
+
+<div class="big">Determinismus ist eine Aussage &uuml;ber das MAXIMUM, nicht &uuml;ber den Mittelwert.</div>
+
+<div class="cols"><div class="col"><section>
+<h2>System pr&uuml;fen &mdash; l&auml;uft ein RT-Kernel?</h2>
+<table>
+<tr><td class="c">uname -a</td><td class="d">Muss <code>PREEMPT_RT</code> enthalten</td></tr>
+<tr><td class="c">cat /sys/kernel/realtime</td><td class="d">Muss <code>1</code> sein (fehlt bei Standardkernel)</td></tr>
+<tr><td class="c">zcat /proc/config.gz | grep PREEMPT</td><td class="d"><code>CONFIG_PREEMPT_RT=y</code> suchen</td></tr>
+<tr><td class="c">ps -eLo pid,class,rtprio,comm | grep irq/</td><td class="d">IRQ-Handler als eigene Threads = RT</td></tr>
+<tr><td class="c">cat /proc/device-tree/model</td><td class="d">Hardware-Modell best&auml;tigen</td></tr>
+<tr><td class="c">nproc</td><td class="d">Anzahl CPU-Kerne</td></tr>
+</table>
+</section><section>
+<h2>Kernel umschalten (Kurs-Setup)</h2>
+<table>
+<tr><td class="c">sudo ./switch-kernel.sh rt</td><td class="d">PREEMPT_RT aktivieren + Reboot</td></tr>
+<tr><td class="c">sudo ./switch-kernel.sh std</td><td class="d">Standardkernel + Reboot</td></tr>
+<tr><td class="c">./switch-kernel.sh status</td><td class="d">Zustand anzeigen, kein Reboot</td></tr>
+<tr><td class="c">sudo ./switch-kernel.sh isolate on</td><td class="d"><code>isolcpus=2,3</code> setzen (Tag 2)</td></tr>
+</table>
+<div class="box warn"><b>Falle:</b> Bei eigenem Kernel-Dateinamen setzt <code>start4.elf</code> <code>arm_64bit</code> nicht automatisch. Ohne <code>arm_64bit=1</code> in <code>config.txt</code> bootet der Pi 4 nicht.</div>
+</section><section>
+<h2>Ergebnis lesen</h2>
+<table>
+<tr><td class="c">Min</td><td class="d">Bestfall &mdash; interessiert niemanden</td></tr>
+<tr><td class="c">Avg</td><td class="d">Mittelwert &mdash; sagt nichts &uuml;ber Echtzeit</td></tr>
+<tr><td class="c"><b>Max</b></td><td class="d"><b>Die einzige Zahl, die z&auml;hlt</b></td></tr>
+</table>
+</section><section>
+<h2>Wenn es nicht geht &mdash; Erste Hilfe</h2>
+<table>
+<tr><td class="c">Pi bootet nicht nach Kernelwechsel</td><td class="d"><code>arm_64bit=1</code> fehlt. SD-Karte am PC mounten, <code>config.txt</code> korrigieren</td></tr>
+<tr><td class="c">uname zeigt PREEMPT statt PREEMPT_RT</td><td class="d">Falscher Kernel gebootet. <code>./switch-kernel.sh status</code></td></tr>
+<tr><td class="c">i2cdetect zeigt nichts</td><td class="d">Verkabelung &rarr; <code>dtparam=i2c_arm=on</code> &rarr; Reboot &rarr; <code>lsmod</code></td></tr>
+<tr><td class="c">Permission denied bei /dev/i2c-1</td><td class="d"><code>sudo usermod -aG i2c $USER</code>, dann neu einloggen</td></tr>
+<tr><td class="c">SCHED_FIFO schl&auml;gt fehl</td><td class="d">Mit <code>sudo</code> starten oder Gruppe <code>realtime</code></td></tr>
+<tr><td class="c">RT-Latenzen nicht besser</td><td class="d">Ohne Last gemessen. Last erzeugen und erneut messen</td></tr>
+<tr><td class="c">Modul-Fehler nach RT-Boot</td><td class="d"><code>ls /lib/modules/</code> &mdash; RT-Version vorhanden?</td></tr>
+<tr><td class="c">System eingefroren</td><td class="d">SCHED_FIFO-Endlosschleife. Strom aus. N&auml;chstes Mal <code>-D</code> nutzen</td></tr>
+</table>
+</section></div><div class="col"><section>
+<h2>Begriffe in je einer Zeile</h2>
+<table>
+<tr><td class="c">Latenz</td><td class="d">Zeit zwischen Ereignis und Reaktion</td></tr>
+<tr><td class="c">Jitter</td><td class="d">Schwankung der Latenz &mdash; die eigentlich interessante Gr&ouml;&szlig;e</td></tr>
+<tr><td class="c">Determinismus</td><td class="d">Der Worst Case ist bekannt <b>und beschr&auml;nkt</b></td></tr>
+<tr><td class="c">Preemption</td><td class="d">Verdr&auml;ngung einer laufenden Aufgabe durch eine wichtigere</td></tr>
+<tr><td class="c">Priority Inversion</td><td class="d">Hohe Priorit&auml;t wartet auf niedrige (Mars Pathfinder)</td></tr>
+<tr><td class="c">Priority Inheritance</td><td class="d">Der Blockierer erbt die Priorit&auml;t des Wartenden</td></tr>
+<tr><td class="c">Harte Echtzeit</td><td class="d">Frist verletzt = Systemversagen</td></tr>
+<tr><td class="c">Weiche Echtzeit</td><td class="d">Nutzen sinkt allm&auml;hlich, System l&auml;uft weiter</td></tr>
+<tr><td class="c">Single-Kernel</td><td class="d">PREEMPT_RT &mdash; der Kernel selbst wird unterbrechbar</td></tr>
+<tr><td class="c">Dual-Kernel</td><td class="d">Xenomai/RTAI &mdash; Linux als Task niedrigster Priorit&auml;t</td></tr>
+</table>
+</section><section>
+<h2>cyclictest &mdash; die wichtigsten Flags</h2>
+<table>
+<tr><td class="c">-m</td><td class="d"><code>mlockall</code>: Speicher sperren, Page-Faults vermeiden</td></tr>
+<tr><td class="c">-S</td><td class="d">SMP-Modus: ein Thread pro CPU-Kern</td></tr>
+<tr><td class="c">-p 99</td><td class="d">SCHED_FIFO-Priorit&auml;t (1&ndash;99)</td></tr>
+<tr><td class="c">-i 1000</td><td class="d">Intervall in Mikrosekunden</td></tr>
+<tr><td class="c">-D 60s</td><td class="d">Laufzeit (auch <code>1m</code>, <code>2h</code>)</td></tr>
+<tr><td class="c">-h 400</td><td class="d">Histogramm bis 400 &micro;s ausgeben</td></tr>
+<tr><td class="c">-a 3</td><td class="d">Auf CPU-Kern 3 festnageln</td></tr>
+<tr><td class="c">-t 4</td><td class="d">Anzahl Threads explizit</td></tr>
+<tr><td class="c">-q</td><td class="d">Leise, nur Endergebnis</td></tr>
+</table>
+<h3>Standardaufruf f&uuml;r den Kurs</h3>
+<div class="box"><code>sudo cyclictest -m -S -p 99 -i 1000 -h 400 -D 60s</code></div>
+<div class="box warn"><b>Ohne Last gemessen = wertlos.</b> Immer parallel:<br>
+<code>stress-ng --cpu 4 --io 4 --vm 2 --vm-bytes 128M -t 70s</code></div>
+</section><section>
+<h2>Moderne Alternativen (rtla)</h2>
+<table>
+<tr><td class="c">sudo rtla timerlat top -d 30s</td><td class="d">Timer-Latenz, aufgeschl&uuml;sselt nach IRQ und Thread</td></tr>
+<tr><td class="c">sudo rtla osnoise top -d 30s</td><td class="d">Zeigt <b>wohin</b> die Zeit geht</td></tr>
+<tr><td class="c">sudo rtla timerlat hist -d 30s</td><td class="d">Histogramm-Ausgabe</td></tr>
+</table>
+<div class="box"><b>Unterschied:</b> cyclictest sagt <i>dass</i> es ruckelt. osnoise sagt <i>warum</i>.</div>
+</section></div></div>
+<footer><span>Cheat-Sheet Echtzeit-Linux &middot; Tag 1</span><span>Seite 1 von 2</span></footer>
+</div>
+
+<!-- ================================ SEITE 2 ================================ -->
+<div class="page">
+<header>
+  <h1>Echtzeit-Linux &mdash; Cheat-Sheet Tag 1</h1>
+  <span class="sub">Boot-Parameter &middot; I&sup2;C &middot; Scheduling &middot; Code-Muster</span>
+</header>
+
+<div class="cols"><div class="col"><section>
+<h2>Boot-Parameter &mdash; <code>/boot/firmware/cmdline.txt</code></h2>
+<p style="margin:0 0 1mm 0;color:#666;">Eine einzige Zeile. Kein Zeilenumbruch. Wirksam nach Reboot.</p>
+<table>
+<tr><td class="c">isolcpus=2,3</td><td class="d">Kerne 2 und 3 vom Standard-Scheduler ausnehmen</td></tr>
+<tr><td class="c">nohz_full=2,3</td><td class="d">Scheduler-Tick auf diesen Kernen abschalten</td></tr>
+<tr><td class="c">rcu_nocbs=2,3</td><td class="d">RCU-Callbacks auf andere Kerne verlagern</td></tr>
+<tr><td class="c">irqaffinity=0,1</td><td class="d">Interrupts nur auf Kern 0 und 1</td></tr>
+<tr><td class="c">threadirqs</td><td class="d">IRQ-Handler als Threads (bei RT bereits Standard)</td></tr>
+<tr><td class="c">processor.max_cstate=1</td><td class="d">Tiefe Schlafzust&auml;nde verhindern (x86)</td></tr>
+</table>
+<div class="box"><b>Die drei geh&ouml;ren zusammen.</b> <code>isolcpus</code> allein reicht nicht &mdash; Tick und RCU st&ouml;ren weiter.</div>
+</section><section>
+<h2>Firmware &mdash; <code>/boot/firmware/config.txt</code></h2>
+<table>
+<tr><td class="c">arm_64bit=1</td><td class="d"><b>Pflicht</b> bei eigenem Kernel-Dateinamen</td></tr>
+<tr><td class="c">kernel=kernel8-rt.img</td><td class="d">Welcher Kernel geladen wird</td></tr>
+<tr><td class="c">dtparam=i2c_arm=on</td><td class="d">I&sup2;C aktivieren</td></tr>
+<tr><td class="c">dtparam=i2c_arm_baudrate=400000</td><td class="d">Fast Mode, 400&nbsp;kHz</td></tr>
+<tr><td class="c">force_turbo=0</td><td class="d">Kein dynamisches &Uuml;bertakten</td></tr>
+</table>
+</section><section>
+<h2>Laufzeit &mdash; sofort wirksam, &uuml;berlebt keinen Reboot</h2>
+<table>
+<tr><td class="c">sudo cpupower frequency-set -g performance</td><td class="d">Governor auf Volltakt</td></tr>
+<tr><td class="c">cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor</td><td class="d">Aktuellen Governor lesen</td></tr>
+<tr><td class="c">vcgencmd measure_temp</td><td class="d">SoC-Temperatur</td></tr>
+<tr><td class="c">vcgencmd get_throttled</td><td class="d"><code>0x0</code> = alles gut</td></tr>
+<tr><td class="c">echo 3 | sudo tee /proc/irq/*/smp_affinity</td><td class="d">IRQs auf Kern 0,1 begrenzen</td></tr>
+<tr><td class="c">cat /proc/interrupts</td><td class="d">Wer bekommt wie viele Interrupts?</td></tr>
+</table>
+</section></div><div class="col"><section>
+<h2>Scheduling</h2>
+<table>
+<tr><td class="c">chrt -f 80 ./programm</td><td class="d">SCHED_FIFO Priorit&auml;t 80 starten</td></tr>
+<tr><td class="c">chrt -p &lt;pid&gt;</td><td class="d">Policy eines Prozesses abfragen</td></tr>
+<tr><td class="c">chrt -f -p 80 &lt;pid&gt;</td><td class="d">Laufenden Prozess umstellen</td></tr>
+<tr><td class="c">taskset -c 3 ./programm</td><td class="d">Auf CPU 3 festnageln</td></tr>
+<tr><td class="c">ps -eLo pid,class,rtprio,ni,comm</td><td class="d">Alle Threads mit Policy und Priorit&auml;t</td></tr>
+</table>
+<h3>Priorit&auml;ten &mdash; Faustregel</h3>
+<table>
+<tr><td class="c">99</td><td class="d">Reserviert &mdash; Finger weg</td></tr>
+<tr><td class="c">80&ndash;90</td><td class="d">Kritische Regelschleife</td></tr>
+<tr><td class="c">50&ndash;79</td><td class="d">Wichtige Echtzeitaufgaben</td></tr>
+<tr><td class="c">1&ndash;49</td><td class="d">Weiche Echtzeit</td></tr>
+<tr><td class="c">SCHED_OTHER</td><td class="d">Alles Nichtkritische</td></tr>
+</table>
+<div class="box warn"><b>Warnung:</b> SCHED_FIFO ist nicht pr&auml;emptiv gegen gleiche Priorit&auml;t. Eine Endlosschleife mit Priorit&auml;t 99 friert das System ein. Immer mit <code>-D</code> oder Watchdog testen.</div>
+</section><section>
+<h2>I&sup2;C und Sensor</h2>
+<table>
+<tr><td class="c">i2cdetect -y 1</td><td class="d">Bus scannen &mdash; BME280 auf <code>0x76</code>/<code>0x77</code></td></tr>
+<tr><td class="c">i2cget -y 1 0x76 0xD0</td><td class="d">Chip-ID: <code>0x60</code>=BME280, <code>0x58</code>=BMP280</td></tr>
+<tr><td class="c">lsmod | grep i2c</td><td class="d">Module geladen?</td></tr>
+<tr><td class="c">groups</td><td class="d">Benutzer muss in Gruppe <code>i2c</code> sein</td></tr>
+</table>
+<h3>Verkabelung BME280 &rarr; Pi 4</h3>
+<table>
+<tr><td class="c">VIN &rarr; Pin 1</td><td class="d">3V3 &mdash; <b>niemals 5V</b></td></tr>
+<tr><td class="c">GND &rarr; Pin 6</td><td class="d">Masse</td></tr>
+<tr><td class="c">SDA &rarr; Pin 3</td><td class="d">GPIO2</td></tr>
+<tr><td class="c">SCL &rarr; Pin 5</td><td class="d">GPIO3</td></tr>
+</table>
+</section><section>
+<h2>Das Code-Muster f&uuml;r zyklische Aufgaben</h2>
+<div class="box warn"><b>FALSCH</b> &mdash; Fehler akkumuliert:<br>
+<code>while(1) { arbeite(); usleep(100000); }</code><br>
+Periode = 100&nbsp;ms + Arbeitszeit. Driftet.</div>
+<div class="box"><b>RICHTIG</b> &mdash; absolute Deadline:<br>
+<code>clock_gettime(CLOCK_MONOTONIC, &amp;next);</code><br>
+<code>while(1) {</code><br>
+<code>&nbsp;&nbsp;ts_add_ns(&amp;next, PERIODE_NS);</code><br>
+<code>&nbsp;&nbsp;clock_nanosleep(CLOCK_MONOTONIC,</code><br>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;TIMER_ABSTIME, &amp;next, NULL);</code><br>
+<code>&nbsp;&nbsp;arbeite();</code><br>
+<code>}</code></div>
+<table>
+<tr><td class="c">CLOCK_MONOTONIC</td><td class="d">Springt nie. <b>Immer diese Uhr.</b></td></tr>
+<tr><td class="c">CLOCK_REALTIME</td><td class="d">Kann durch NTP springen &mdash; auch r&uuml;ckw&auml;rts</td></tr>
+<tr><td class="c">TIMER_ABSTIME</td><td class="d">Schl&auml;ft bis Zeitpunkt, nicht f&uuml;r Dauer</td></tr>
+<tr><td class="c">mlockall(MCL_CURRENT|MCL_FUTURE)</td><td class="d">Page-Faults verhindern</td></tr>
+</table>
+<div class="box"><b>tv_nsec normalisieren!</b> &Uuml;ber 999.999.999 gibt <code>clock_nanosleep</code> <code>EINVAL</code> zur&uuml;ck.</div>
+</section></div></div>
+<footer><span>Cheat-Sheet Echtzeit-Linux &middot; Tag 1</span><span>Seite 2 von 2</span></footer>
+</div>
+
+</body>
+</html>
