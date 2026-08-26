@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Cheat-Sheet Echtzeit-Linux – Tag 3</title>
+<style>
+  @page { size: A4; margin: 9mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 7.3pt; line-height: 1.32; color: #16191d; margin: 0;
+  }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+
+  header {
+    border-bottom: 2.5pt solid #b8571e; padding-bottom: 2mm; margin-bottom: 3mm;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  header h1 { font-size: 13pt; margin: 0; letter-spacing: -0.2pt; }
+  header .sub { font-size: 7pt; color: #666; }
+
+  .cols { column-count: 2; column-gap: 5mm; column-fill: auto; }
+
+  section { break-inside: avoid; margin-bottom: 3.2mm; }
+  h2 {
+    font-size: 8pt; margin: 0 0 1.2mm 0; padding: 0.9mm 1.6mm;
+    background: #16191d; color: #fff; text-transform: uppercase;
+    letter-spacing: 0.5pt; border-radius: 1pt;
+  }
+  h3 { font-size: 7.4pt; margin: 2mm 0 0.8mm 0; color: #b8571e; }
+
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 0.7mm 1.2mm; vertical-align: top; border-bottom: 0.5pt solid #e5e5e5; }
+  code {
+    font-family: "SF Mono", Consolas, monospace; font-size: 6.7pt;
+    background: #f2f0ed; padding: 0.2mm 0.8mm; border-radius: 1pt;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  pre {
+    font-family: "SF Mono", Consolas, monospace; font-size: 6.6pt;
+    background: #16191d; color: #e8e6e3; padding: 1.6mm; border-radius: 1.5pt;
+    margin: 0.8mm 0; white-space: pre-wrap; word-break: break-all;
+  }
+  .note { font-size: 6.6pt; color: #666; font-style: italic; }
+  .warn { color: #b8571e; font-weight: bold; }
+  footer { text-align: center; font-size: 6.5pt; color: #999; margin-top: 3mm; }
+</style>
+</head>
+<body>
+
+<div class="page">
+<header>
+  <h1>Echtzeit-Linux · Cheat-Sheet Tag 3</h1>
+  <div class="sub">Hardware, Analyse &amp; Praxisprojekt · Gaëtan Pandji</div>
+</header>
+
+<div class="cols">
+
+<section>
+<h2>Analyse-Werkzeuge — Schnellreferenz</h2>
+<h3>ftrace / trace-cmd</h3>
+<pre>sudo trace-cmd record -e sched:sched_switch \
+     -e sched:sched_wakeup -e irq:irq_handler_entry \
+     -e irq:irq_handler_exit -o trace.dat sleep 5
+sudo trace-cmd report -t trace.dat | less</pre>
+
+<h3>perf</h3>
+<pre>sudo perf stat -e context-switches,cpu-migrations \
+     ./programm
+sudo perf record -g ./programm; perf report
+sudo perf top -C 3   # nur auf Kern 3</pre>
+
+<h3>rtla (osnoise / timerlat) — der verifizierte Fallback</h3>
+<pre>sudo rtla osnoise top -d 30s -P f:99 -c 3
+sudo rtla timerlat top -d 30s -P f:99 -c 3
+sudo rtla timerlat hist -d 30s -P f:99 -c 3</pre>
+
+<h3>Perfetto — ftrace-Pfad (falls verifiziert, siehe VERDIKT.md)</h3>
+<pre>sudo trace-cmd record -e sched:sched_switch \
+     -e sched:sched_wakeup -e irq:irq_handler_entry \
+     -e irq:irq_handler_exit -o trace.dat sleep 5
+trace-cmd report -t trace.dat > ftrace.txt
+{ echo "# tracer: nop"; echo "#"; \
+  grep -v "^cpus=" ftrace.txt; } > kurs.systrace
+# kurs.systrace per scp holen, in ui.perfetto.dev ziehen</pre>
+<p class="note">Browser läuft auf dem Notebook, nicht auf dem Pi.</p>
+</section>
+
+<section>
+<h2>Fehlerbilder — Signatur → Ursache</h2>
+<table>
+<tr><td><b>Ganze Verteilung verschoben</b></td><td>CPU-Last, keine Isolierung</td></tr>
+<tr><td><b>Zwei getrennte Buckel</b></td><td>Frequency Scaling / Governor</td></tr>
+<tr><td><b>Schmaler Schwanz, Zentrum ok</b></td><td>I/O- / IRQ-Sturm, IRQ-Affinität fehlt</td></tr>
+<tr><td><b>Wenige, extreme Ausreißer</b></td><td>Page-Faults, kein mlockall</td></tr>
+<tr><td><b>Allmähliche Drift über Zeit</b></td><td>Thermisches Throttling</td></tr>
+<tr><td><b>Große, unregelmäßige Ausreißer</b></td><td>Priority Inversion, keine Vererbung</td></tr>
+</table>
+<p class="note">Erst Bild ansehen, dann Ursache benennen, dann eingreifen.</p>
+</section>
+
+<section>
+<h2>Diagnose-Reihenfolge (Governor / Temperatur / Isolation)</h2>
+<pre>cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq
+cat /sys/devices/system/cpu/isolated
+vcgencmd measure_temp
+vcgencmd get_throttled     # 0x0 = nie gedrosselt
+cat /proc/irq/<n>/smp_affinity</pre>
+
+<h3>Governor fest auf performance</h3>
+<pre>sudo cpupower frequency-set -g performance
+# oder je Kern:
+for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; \
+  do echo performance | sudo tee $f; done</pre>
+</section>
+
+</div>
+</div>
+
+<div class="page">
+<header>
+  <h1>Echtzeit-Linux · Cheat-Sheet Tag 3 (Forts.)</h1>
+  <div class="sub">Telemetrie &amp; Architektur der Entkopplung</div>
+</header>
+
+<div class="cols">
+
+<section>
+<h2>Stufe 3 — stage3_telemetry Aufrufe</h2>
+<h3>Referenz ohne Telemetrie</h3>
+<pre>sudo ./stage3_telemetry --fifo 80 --mlock --cpu 3 \
+     --period 10 --duration 120 --csv lauf_A.csv --quiet</pre>
+
+<h3>Richtig — entkoppelt via Ringpuffer</h3>
+<pre>sudo ./stage3_telemetry --fifo 80 --mlock --cpu 3 \
+     --period 10 --duration 120 \
+     --influx &lt;notebook-ip&gt;:8086 --org kurs \
+     --bucket echtzeit --token kurs-token-2026 \
+     --tag-lauf stufe3_entkoppelt \
+     --csv lauf_B.csv --quiet</pre>
+
+<h3>Absichtlich falsch — zum Vergleich</h3>
+<pre>sudo ./stage3_telemetry --fifo 80 --mlock --cpu 3 \
+     --period 10 --duration 120 --demo-blocking \
+     --influx &lt;notebook-ip&gt;:8086 --org kurs \
+     --bucket echtzeit --token kurs-token-2026 \
+     --tag-lauf stufe3_blockierend \
+     --csv lauf_C.csv --quiet</pre>
+
+<h3>Fallback ohne Netz</h3>
+<pre>python3 csv_zu_html.py lauf_B.csv dashboard.html --live</pre>
+</section>
+
+<section>
+<h2>Telemetrie-Stack (Notebook)</h2>
+<pre>cd telemetrie-stack
+docker compose up -d
+# Grafana: http://&lt;notebook-ip&gt;:3000
+# Login:   trainer / echtzeit2026
+# Influx-Token: kurs-token-2026 (bereits provisioniert)</pre>
+<p class="note">Läuft auf dem Notebook des Trainers, nicht auf dem Pi.</p>
+</section>
+
+<section>
+<h2>Die eine Regel der Architektur</h2>
+<p style="font-size:8pt; font-weight:bold; color:#b8571e;">
+Der RT-Thread ruft niemals etwas auf, das blockieren kann.
+</p>
+<table>
+<tr><td>RT-Thread</td><td>SCHED_FIFO, isolierter Kern, schreibt nur in Ringpuffer</td></tr>
+<tr><td>Ringpuffer</td><td>Lock-frei (SPSC, C11-Atomics), kein Mutex, kein malloc</td></tr>
+<tr><td>Voll?</td><td>Älteste Messung wird verworfen — nie blockieren</td></tr>
+<tr><td>Sender-Thread</td><td>SCHED_OTHER, andere Kerne, darf warten/scheitern</td></tr>
+</table>
+</section>
+
+<section>
+<h2>Fehlerdiagnose Stufe 3</h2>
+<table>
+<tr><td>Kein Zugriff auf Notebook</td><td>Firewall / Client-Isolation → sofort auf csv_zu_html.py wechseln</td></tr>
+<tr><td>Alle Läufe überlagert in Grafana</td><td>--tag-lauf vergessen, in InfluxDB per Tag filtern</td></tr>
+<tr><td>docker compose Befehl nicht gefunden</td><td>ggf. docker-compose (mit Bindestrich), je nach Version</td></tr>
+</table>
+</section>
+
+</div>
+<footer>Seminar „Echtzeit-Linux" · Trainer: Gaëtan Pandji · Tag 3 von 3</footer>
+</div>
+
+</body>
+</html>

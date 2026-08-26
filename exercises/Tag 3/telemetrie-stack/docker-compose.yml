@@ -1,0 +1,43 @@
+# docker-compose.yml — Telemetrie-Stack fuer Stufe 3
+# Laeuft auf DEINEM Notebook, nicht auf dem Pi. Der Pi schiebt nur HTTP-POSTs
+# ans Netz; Speicherung und Visualisierung passieren hier.
+#
+# Start : docker compose up -d
+# Stopp : docker compose down          (Daten bleiben in ./data)
+# Reset : docker compose down -v       (Daten komplett loeschen)
+#
+# Nach dem ersten Start: Token siehe unten unter "Token holen" — der Wert muss
+# in stage3_telemetry als --token uebergeben werden.
+
+services:
+  influxdb:
+    image: influxdb:2.7
+    container_name: kurs-influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: trainer
+      DOCKER_INFLUXDB_INIT_PASSWORD: echtzeit2026
+      DOCKER_INFLUXDB_INIT_ORG: kurs
+      DOCKER_INFLUXDB_INIT_BUCKET: echtzeit
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: kurs-token-2026
+    volumes:
+      - ./data/influxdb:/var/lib/influxdb2
+      - ./data/influxdb-config:/etc/influxdb2
+
+  grafana:
+    image: grafana/grafana-oss:11.2.0
+    container_name: kurs-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: trainer
+      GF_SECURITY_ADMIN_PASSWORD: echtzeit2026
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning
+    depends_on:
+      - influxdb
